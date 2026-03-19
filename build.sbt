@@ -10,5 +10,12 @@ lazy val root = (project in file("."))
     name             := "sbt-columnar-format",
     sbtPlugin        := true,
     scalaVersion     := "2.12.20",
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.18" % Test
+    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.18" % Test,
+
+    // Coverage
+    coverageEnabled              := true,
+    coverageMinimumStmtTotal     := 92,
+    coverageMinimumBranchTotal   := 86,
+    coverageFailOnMinimum        := true,
+    coverageHighlighting         := true
   )
