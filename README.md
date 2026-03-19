@@ -23,26 +23,32 @@ sbt columnarFmt
 
 ## Configuration
 
-All settings are consolidated into a single `ColumnarConfig` value:
+`columnarFmtConfig` accepts a `Seq[ColumnarConfig]`. Each entry targets its own set of files
+and may use a different formatter, sections, and line limit — letting you format multiple file
+types in a single `sbt columnarFmt` run.
 
 ```scala
 // build.sbt
-columnarFmtConfig := ColumnarConfig(
-  formatterConfig = ColumnarFormatterConfig.csv,
-  fileGlob        = "**/*.csv",
-  lineLimit       = 120,
-  fileHeader      = "",
-  sections        = Seq(ColumnarSection("# Default"))
+columnarFmtConfig := Seq(
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.csv,
+    fileGlob        = "**/*.csv",
+    lineLimit       = 120,
+    fileHeader      = "",
+    sections        = Seq(ColumnarSection("# Default"))
+  )
 )
 ```
 
-| Field             | Type                      | Default                          |
-|-------------------|---------------------------|----------------------------------|
-| `formatterConfig` | `ColumnarFormatterConfig` | `ColumnarFormatterConfig.csv`    |
+Each `ColumnarConfig` entry has the following fields:
+
+| Field             | Type                      | Default                             |
+|-------------------|---------------------------|-------------------------------------|
+| `formatterConfig` | `ColumnarFormatterConfig` | `ColumnarFormatterConfig.csv`       |
 | `sections`        | `Seq[ColumnarSection]`    | `Seq(ColumnarSection("# Default"))` |
-| `lineLimit`       | `Int`                     | `120`                            |
-| `fileGlob`        | `String`                  | `"**/*.csv"`                     |
-| `fileHeader`      | `String`                  | `""`                             |
+| `lineLimit`       | `Int`                     | `120`                               |
+| `fileGlob`        | `String`                  | `"**/*.csv"`                        |
+| `fileHeader`      | `String`                  | `""`                                |
 
 `fileGlob` supports:
 - exact path: `"conf/app.routes"`
@@ -59,13 +65,15 @@ Comma-separated `col0,col1,col2`. Column 1 is used for section matching.
 
 ```scala
 // build.sbt — these are the defaults, override only what you need
-columnarFmtConfig := ColumnarConfig(
-  formatterConfig = ColumnarFormatterConfig.csv,
-  fileGlob        = "**/*.csv",
-  sections        = Seq(
-    ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
-    ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
-    ColumnarSection("# Misc")
+columnarFmtConfig := Seq(
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.csv,
+    fileGlob        = "**/*.csv",
+    sections        = Seq(
+      ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
+      ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
+      ColumnarSection("# Misc")
+    )
   )
 )
 ```
@@ -97,13 +105,15 @@ Tab-separated `col0\tcol1\tcol2`. Column 1 is used for section matching.
 
 ```scala
 // build.sbt
-columnarFmtConfig := ColumnarConfig(
-  formatterConfig = ColumnarFormatterConfig.tsv,
-  fileGlob        = "**/*.tsv",
-  sections        = Seq(
-    ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
-    ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
-    ColumnarSection("# Misc")
+columnarFmtConfig := Seq(
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.tsv,
+    fileGlob        = "**/*.tsv",
+    sections        = Seq(
+      ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
+      ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
+      ColumnarSection("# Misc")
+    )
   )
 )
 ```
@@ -118,13 +128,15 @@ Input parsed on `|` (spaces around pipes are trimmed); output formatted as `col0
 
 ```scala
 // build.sbt
-columnarFmtConfig := ColumnarConfig(
-  formatterConfig = ColumnarFormatterConfig.pipeDelimited,
-  fileGlob        = "**/*.pipe",
-  sections        = Seq(
-    ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
-    ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
-    ColumnarSection("# Misc")
+columnarFmtConfig := Seq(
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.pipeDelimited,
+    fileGlob        = "**/*.pipe",
+    sections        = Seq(
+      ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
+      ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
+      ColumnarSection("# Misc")
+    )
   )
 )
 ```
@@ -153,21 +165,23 @@ controller prefix. Sections are output in definition order; empty sections are o
 
 ```scala
 // build.sbt
-columnarFmtConfig := ColumnarConfig(
-  formatterConfig = ColumnarFormatterConfig.playRoutes,
-  fileGlob        = "conf/app.routes",
-  lineLimit       = 120,
-  fileHeader      = "# Auto-formatted — do not edit by hand",
-  sections        = Seq(
-    ColumnarSection("# Infrastructure",
-      primaryPrefixes   = Seq("/ping", "/assets"),
-      secondaryPrefixes = Seq("controllers.Assets")),
-    ColumnarSection("# Public",
-      primaryPrefixes   = Seq("/public")),
-    ColumnarSection("# Admin",
-      primaryPrefixes   = Seq("/admin"),
-      lineLimit         = Some(160)),
-    ColumnarSection("# Misc")   // catch-all
+columnarFmtConfig := Seq(
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.playRoutes,
+    fileGlob        = "conf/app.routes",
+    lineLimit       = 120,
+    fileHeader      = "# Auto-formatted — do not edit by hand",
+    sections        = Seq(
+      ColumnarSection("# Infrastructure",
+        primaryPrefixes   = Seq("/ping", "/assets"),
+        secondaryPrefixes = Seq("controllers.Assets")),
+      ColumnarSection("# Public",
+        primaryPrefixes   = Seq("/public")),
+      ColumnarSection("# Admin",
+        primaryPrefixes   = Seq("/admin"),
+        lineLimit         = Some(160)),
+      ColumnarSection("# Misc")   // catch-all
+    )
   )
 )
 ```
@@ -203,25 +217,65 @@ Supply your own `ColumnarFormatterConfig` for any other fixed-width or delimited
 
 ```scala
 // build.sbt
-columnarFmtConfig := ColumnarConfig(
-  formatterConfig = ColumnarFormatterConfig(
-    parse        = line => {
-      val t = line.trim
-      if (t.isEmpty || t.startsWith("#")) None
-      else {
-        val parts = t.split(";", 3).map(_.trim)
-        if (parts.length == 3) Some(parts.toIndexedSeq) else None
-      }
-    },
-    primaryCol   = 1,
-    secondaryCol = 2,
-    dedupeKey    = cols => (cols(0), cols(1)),
-    subkeyFn     = cols => cols(2).split("\\.").dropRight(1).mkString("."),
-    delimiter    = " ; "
-  ),
-  fileGlob = "**/*.dat"
+columnarFmtConfig := Seq(
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig(
+      parse        = line => {
+        val t = line.trim
+        if (t.isEmpty || t.startsWith("#")) None
+        else {
+          val parts = t.split(";", 3).map(_.trim)
+          if (parts.length == 3) Some(parts.toIndexedSeq) else None
+        }
+      },
+      primaryCol   = 1,
+      secondaryCol = 2,
+      dedupeKey    = cols => (cols(0), cols(1)),
+      subkeyFn     = cols => cols(2).split("\\.").dropRight(1).mkString("."),
+      delimiter    = " ; "
+    ),
+    fileGlob = "**/*.dat"
+  )
 )
 ```
+
+---
+
+## Formatting multiple file types
+
+Pass more than one `ColumnarConfig` to format different file types in the same `sbt columnarFmt`
+run. Each entry is processed independently with its own glob, formatter, sections, and header.
+
+```scala
+// build.sbt
+columnarFmtConfig := Seq(
+  // Play routes files
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.playRoutes,
+    fileGlob        = "**/*.routes",
+    fileHeader      = "# Auto-formatted — do not edit by hand",
+    sections        = Seq(
+      ColumnarSection("# Infrastructure", primaryPrefixes = Seq("/ping", "/assets")),
+      ColumnarSection("# Public",         primaryPrefixes = Seq("/public")),
+      ColumnarSection("# Admin",          primaryPrefixes = Seq("/admin")),
+      ColumnarSection("# Misc")
+    )
+  ),
+  // CSV metrics files
+  ColumnarConfig(
+    formatterConfig = ColumnarFormatterConfig.csv,
+    fileGlob        = "**/*.csv",
+    sections        = Seq(
+      ColumnarSection("# OS",  primaryPrefixes = Seq("system.")),
+      ColumnarSection("# Web", primaryPrefixes = Seq("app.")),
+      ColumnarSection("# Misc")
+    )
+  )
+)
+```
+
+Each config's `fileGlob` is resolved independently, so there is no risk of one config's
+formatter being applied to another config's files.
 
 ---
 

@@ -40,34 +40,36 @@ object ColumnarFormatPlugin extends AutoPlugin {
       "Format the columnar file: groups rows into sections, aligns columns, deduplicates"
     )
 
-    val columnarFmtConfig = settingKey[ColumnarConfig](
-      "Root configuration for the columnarFmt task. Wraps sections, lineLimit, fileGlob, " +
-      "fileHeader, and formatterConfig in a single value."
+    val columnarFmtConfig = settingKey[Seq[ColumnarConfig]](
+      "Configurations for the columnarFmt task. Each entry targets a distinct set of files " +
+      "(via its fileGlob) and may use different sections, lineLimit, or formatterConfig."
     )
   }
 
   import autoImport._
 
   override def projectSettings: Seq[Setting[_]] = Seq(
-    columnarFmtConfig := ColumnarConfig.default,
-    columnarFmt    := {
-      val log   = streams.value.log
-      val cfg   = columnarFmtConfig.value
-      val files = ColumnarGlob.resolve(baseDirectory.value, cfg.fileGlob)
-      if (files.isEmpty) {
-        log.warn(s"No files matched: ${cfg.fileGlob}")
-      } else {
-        files.foreach { file =>
-          IO.writeLines(file,
-            ColumnarFormatter.reformat(
-              IO.readLines(file),
-              cfg.sections,
-              cfg.lineLimit,
-              cfg.fileHeader,
-              cfg.formatterConfig
+    columnarFmtConfig := Seq(ColumnarConfig.default),
+    columnarFmt := {
+      val log     = streams.value.log
+      val baseDir = baseDirectory.value
+      columnarFmtConfig.value.foreach { cfg =>
+        val files = ColumnarGlob.resolve(baseDir, cfg.fileGlob)
+        if (files.isEmpty) {
+          log.warn(s"[sbt-columnar-format] No files matched: ${cfg.fileGlob}")
+        } else {
+          files.foreach { file =>
+            IO.writeLines(file,
+              ColumnarFormatter.reformat(
+                IO.readLines(file),
+                cfg.sections,
+                cfg.lineLimit,
+                cfg.fileHeader,
+                cfg.formatterConfig
+              )
             )
-          )
-          log.info(s"[sbt-columnar-format] ${file.getName} formatted")
+            log.info(s"[sbt-columnar-format] ${file.getName} formatted")
+          }
         }
       }
     }
