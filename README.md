@@ -19,6 +19,16 @@ Run the formatter from sbt:
 sbt columnarFmt
 ```
 
+To check that all targeted files are already formatted (e.g. in CI) without modifying them:
+
+```
+sbt columnarFmtCheck
+```
+
+`columnarFmtCheck` applies the same logic as `columnarFmt` in memory, compares the result to the
+file on disk, and fails the build if any file would be changed. Run `columnarFmt` locally to fix
+any reported files.
+
 ---
 
 ## Configuration

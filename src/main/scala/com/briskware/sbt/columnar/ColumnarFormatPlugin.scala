@@ -40,6 +40,10 @@ object ColumnarFormatPlugin extends AutoPlugin {
       "Format the columnar file: groups rows into sections, aligns columns, deduplicates"
     )
 
+    val columnarFmtCheck = taskKey[Unit](
+      "Check that all columnar files are already formatted; fails if any file would be changed by columnarFmt"
+    )
+
     val columnarFmtConfig = settingKey[Seq[ColumnarConfig]](
       "Configurations for the columnarFmt task. Each entry targets a distinct set of files " +
       "(via its fileGlob) and may use different sections, lineLimit, or formatterConfig."
@@ -71,6 +75,39 @@ object ColumnarFormatPlugin extends AutoPlugin {
             log.info(s"[sbt-columnar-format] ${file.getName} formatted")
           }
         }
+      }
+    },
+    columnarFmtCheck := {
+      val log     = streams.value.log
+      val baseDir = baseDirectory.value
+      val unformatted = columnarFmtConfig.value.flatMap { cfg =>
+        val files = ColumnarGlob.resolve(baseDir, cfg.fileGlob)
+        if (files.isEmpty) {
+          log.warn(s"[sbt-columnar-format] No files matched: ${cfg.fileGlob}")
+          Nil
+        } else {
+          files.filter { file =>
+            val current    = IO.readLines(file)
+            val reformatted = ColumnarFormatter.reformat(
+              current,
+              cfg.sections,
+              cfg.lineLimit,
+              cfg.fileHeader,
+              cfg.formatterConfig
+            )
+            current != reformatted
+          }
+        }
+      }
+      if (unformatted.nonEmpty) {
+        unformatted.foreach { file =>
+          log.error(s"[sbt-columnar-format] ${file.getPath} is not formatted")
+        }
+        throw new MessageOnlyException(
+          s"[sbt-columnar-format] ${unformatted.size} file(s) are not formatted. Run columnarFmt to fix."
+        )
+      } else {
+        log.info("[sbt-columnar-format] All files are properly formatted")
       }
     }
   )
