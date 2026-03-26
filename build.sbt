@@ -1,5 +1,5 @@
 ThisBuild / organization := "com.briskware"
-ThisBuild / version      := "0.1.0"
+ThisBuild / version      := "0.1.1-SNAPSHOT"
 ThisBuild / startYear    := Some(2026)
 ThisBuild / licenses     := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0"))
 ThisBuild / description  := "sbt plugin for formatting columnar text files: aligns columns, groups rows into sections, deduplicates"
@@ -11,7 +11,13 @@ ThisBuild / developers := List(
     name  = "Briskware Ltd",
     email = "developer@briskware.com",
     url   = url("https://github.com/briskware")
-  )
+  ),
+  Developer(
+    id    = "szaniszlo",
+    name  = "Stefan Szaniszlo",
+    email = "stefan@briskware.com",
+    url   = url("https://github.com/szaniszlo")
+  ),
 )
 
 ThisBuild / scmInfo := Some(ScmInfo(
