@@ -53,19 +53,22 @@ class ColumnarFormatPluginSpec extends AnyWordSpec with Matchers with BeforeAndA
       }
     }
 
-  /** Replicates the columnarFmtCheck task body; throws MessageOnlyException if any file is unformatted. */
+  /** Replicates the core detection/exception logic of the columnarFmtCheck task; throws MessageOnlyException if any file is unformatted. */
   private def runCheckTask(baseDir: File, configs: Seq[ColumnarConfig]): Unit = {
     val unformatted = configs.flatMap { cfg =>
       val files = ColumnarGlob.resolve(baseDir, cfg.fileGlob)
-      files.filter { file =>
-        val current     = IO.readLines(file)
-        val reformatted = ColumnarFormatter.reformat(current, cfg.sections, cfg.lineLimit, cfg.fileHeader, cfg.formatterConfig)
-        current != reformatted
+      IO.withTemporaryFile("sbt-columnar-format", "tmp") { tmp =>
+        files.filter { file =>
+          val currentBytes = IO.readBytes(file)
+          IO.writeLines(tmp, ColumnarFormatter.reformat(IO.readLines(file), cfg.sections, cfg.lineLimit, cfg.fileHeader, cfg.formatterConfig))
+          !java.util.Arrays.equals(currentBytes, IO.readBytes(tmp))
+        }
       }
     }
-    if (unformatted.nonEmpty)
+    val unformattedUnique = unformatted.map(_.getCanonicalFile).distinct
+    if (unformattedUnique.nonEmpty)
       throw new MessageOnlyException(
-        s"[sbt-columnar-format] ${unformatted.size} file(s) are not formatted. Run columnarFmt to fix."
+        s"[sbt-columnar-format] ${unformattedUnique.size} file(s) are not formatted. Run columnarFmt to fix."
       )
   }
 
@@ -328,6 +331,27 @@ class ColumnarFormatPluginSpec extends AnyWordSpec with Matchers with BeforeAndA
         runTask(tmp, Seq(cfg))
 
         noException should be thrownBy runCheckTask(tmp, Seq(cfg))
+      }
+
+      "fail when the only difference is a missing trailing newline" in {
+        writeRoutes(tmp / "app.routes")
+        val cfg = ColumnarConfig(
+          fileGlob        = "*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )
+        // First format the file into its canonical state
+        runTask(tmp, Seq(cfg))
+
+        // Strip any trailing newline characters so the logical lines are unchanged
+        // but the on-disk bytes differ from what IO.writeLines would produce
+        val file      = tmp / "app.routes"
+        val formatted = IO.read(file)
+        val withoutTrailingNewline =
+          formatted.reverse.dropWhile(ch => ch == '\n' || ch == '\r').reverse
+        IO.write(file, withoutTrailingNewline)
+
+        a[MessageOnlyException] should be thrownBy runCheckTask(tmp, Seq(cfg))
       }
 
       "fail when at least one file in a multi-file glob is not formatted" in {

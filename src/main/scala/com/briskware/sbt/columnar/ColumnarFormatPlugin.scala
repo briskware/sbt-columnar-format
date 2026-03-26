@@ -86,25 +86,30 @@ object ColumnarFormatPlugin extends AutoPlugin {
           log.warn(s"[sbt-columnar-format] No files matched: ${cfg.fileGlob}")
           Nil
         } else {
-          files.filter { file =>
-            val current    = IO.readLines(file)
-            val reformatted = ColumnarFormatter.reformat(
-              current,
-              cfg.sections,
-              cfg.lineLimit,
-              cfg.fileHeader,
-              cfg.formatterConfig
-            )
-            current != reformatted
+          IO.withTemporaryFile("sbt-columnar-format", "tmp") { tmp =>
+            files.filter { file =>
+              val currentBytes = IO.readBytes(file)
+              IO.writeLines(tmp,
+                ColumnarFormatter.reformat(
+                  IO.readLines(file),
+                  cfg.sections,
+                  cfg.lineLimit,
+                  cfg.fileHeader,
+                  cfg.formatterConfig
+                )
+              )
+              !java.util.Arrays.equals(currentBytes, IO.readBytes(tmp))
+            }
           }
         }
       }
-      if (unformatted.nonEmpty) {
-        unformatted.foreach { file =>
+      val unformattedUnique = unformatted.map(_.getCanonicalFile).distinct
+      if (unformattedUnique.nonEmpty) {
+        unformattedUnique.foreach { file =>
           log.error(s"[sbt-columnar-format] ${file.getPath} is not formatted")
         }
         throw new MessageOnlyException(
-          s"[sbt-columnar-format] ${unformatted.size} file(s) are not formatted. Run columnarFmt to fix."
+          s"[sbt-columnar-format] ${unformattedUnique.size} file(s) are not formatted. Run columnarFmt to fix."
         )
       } else {
         log.info("[sbt-columnar-format] All files are properly formatted")
