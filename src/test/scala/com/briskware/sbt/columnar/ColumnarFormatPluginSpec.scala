@@ -53,6 +53,25 @@ class ColumnarFormatPluginSpec extends AnyWordSpec with Matchers with BeforeAndA
       }
     }
 
+  /** Replicates the core detection/exception logic of the columnarFmtCheck task; throws MessageOnlyException if any file is unformatted. */
+  private def runCheckTask(baseDir: File, configs: Seq[ColumnarConfig]): Unit = {
+    val unformatted = configs.flatMap { cfg =>
+      val files = ColumnarGlob.resolve(baseDir, cfg.fileGlob)
+      IO.withTemporaryFile("sbt-columnar-format", "tmp") { tmp =>
+        files.filter { file =>
+          val currentBytes = IO.readBytes(file)
+          IO.writeLines(tmp, ColumnarFormatter.reformat(IO.readLines(file), cfg.sections, cfg.lineLimit, cfg.fileHeader, cfg.formatterConfig))
+          !java.util.Arrays.equals(currentBytes, IO.readBytes(tmp))
+        }
+      }
+    }
+    val unformattedUnique = unformatted.map(_.getCanonicalFile).distinct
+    if (unformattedUnique.nonEmpty)
+      throw new MessageOnlyException(
+        s"[sbt-columnar-format] ${unformattedUnique.size} file(s) are not formatted. Run columnarFmt to fix."
+      )
+  }
+
   // ── Fixtures ──────────────────────────────────────────────────────────────
 
   // playRoutes uses primaryCol = 1 (the URL path), so prefixes must match paths, not methods
@@ -256,6 +275,145 @@ class ColumnarFormatPluginSpec extends AnyWordSpec with Matchers with BeforeAndA
         noException should be thrownBy runTask(tmp, Seq.empty)
 
         IO.read(tmp / "metrics.csv").trim mustBe content
+      }
+    }
+  }
+
+  // ── columnarFmtCheck task ──────────────────────────────────────────────────
+
+  "columnarFmtCheck task" when {
+
+    "given a single config" should {
+
+      "succeed when the file is already formatted" in {
+        writeRoutes(tmp / "app.routes")
+        val cfg = ColumnarConfig(
+          fileGlob        = "*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )
+        // Format first so the file is in the canonical state
+        runTask(tmp, Seq(cfg))
+
+        noException should be thrownBy runCheckTask(tmp, Seq(cfg))
+      }
+
+      "fail when the file is not formatted" in {
+        writeRoutes(tmp / "app.routes")
+        val cfg = ColumnarConfig(
+          fileGlob        = "*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )
+        // Deliberately skip runTask so the file is unformatted
+
+        a[MessageOnlyException] should be thrownBy runCheckTask(tmp, Seq(cfg))
+      }
+
+      "succeed when no files match the glob" in {
+        noException should be thrownBy runCheckTask(tmp, Seq(ColumnarConfig(
+          fileGlob        = "**/*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )))
+      }
+
+      "succeed when all files in a multi-file glob are already formatted" in {
+        IO.createDirectory(tmp / "a")
+        IO.createDirectory(tmp / "b")
+        writeRoutes(tmp / "a" / "a.routes")
+        writeRoutes(tmp / "b" / "b.routes")
+        val cfg = ColumnarConfig(
+          fileGlob        = "**/*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )
+        runTask(tmp, Seq(cfg))
+
+        noException should be thrownBy runCheckTask(tmp, Seq(cfg))
+      }
+
+      "fail when the only difference is a missing trailing newline" in {
+        writeRoutes(tmp / "app.routes")
+        val cfg = ColumnarConfig(
+          fileGlob        = "*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )
+        // First format the file into its canonical state
+        runTask(tmp, Seq(cfg))
+
+        // Strip any trailing newline characters so the logical lines are unchanged
+        // but the on-disk bytes differ from what IO.writeLines would produce
+        val file      = tmp / "app.routes"
+        val formatted = IO.read(file)
+        val withoutTrailingNewline =
+          formatted.reverse.dropWhile(ch => ch == '\n' || ch == '\r').reverse
+        IO.write(file, withoutTrailingNewline)
+
+        a[MessageOnlyException] should be thrownBy runCheckTask(tmp, Seq(cfg))
+      }
+
+      "fail when at least one file in a multi-file glob is not formatted" in {
+        IO.createDirectory(tmp / "a")
+        IO.createDirectory(tmp / "b")
+        writeRoutes(tmp / "a" / "a.routes")
+        writeRoutes(tmp / "b" / "b.routes")
+        val cfg = ColumnarConfig(
+          fileGlob        = "**/*.routes",
+          sections        = routesSections,
+          formatterConfig = ColumnarFormatterConfig.playRoutes
+        )
+        // Format only one of the two files
+        runTask(tmp, Seq(cfg.copy(fileGlob = "a/a.routes")))
+
+        a[MessageOnlyException] should be thrownBy runCheckTask(tmp, Seq(cfg))
+      }
+    }
+
+    "given multiple configs" should {
+
+      "succeed when all files across all configs are already formatted" in {
+        writeRoutes(tmp / "app.routes")
+        writeCsv(tmp / "metrics.csv")
+        val configs = Seq(
+          ColumnarConfig(fileGlob = "*.routes", sections = routesSections,
+                         formatterConfig = ColumnarFormatterConfig.playRoutes),
+          ColumnarConfig(fileGlob = "*.csv",    sections = csvSections,
+                         formatterConfig = ColumnarFormatterConfig.csv)
+        )
+        runTask(tmp, configs)
+
+        noException should be thrownBy runCheckTask(tmp, configs)
+      }
+
+      "fail when a file matched by the second config is not formatted" in {
+        writeRoutes(tmp / "app.routes")
+        writeCsv(tmp / "metrics.csv")
+        val routesCfg = ColumnarConfig(fileGlob = "*.routes", sections = routesSections,
+                                        formatterConfig = ColumnarFormatterConfig.playRoutes)
+        val csvCfg    = ColumnarConfig(fileGlob = "*.csv",    sections = csvSections,
+                                        formatterConfig = ColumnarFormatterConfig.csv)
+        // Only format the routes file; leave the CSV unformatted
+        runTask(tmp, Seq(routesCfg))
+
+        a[MessageOnlyException] should be thrownBy runCheckTask(tmp, Seq(routesCfg, csvCfg))
+      }
+
+      "succeed when all configs match no files" in {
+        noException should be thrownBy runCheckTask(tmp, Seq(
+          ColumnarConfig(fileGlob = "**/*.routes", sections = routesSections,
+                         formatterConfig = ColumnarFormatterConfig.playRoutes),
+          ColumnarConfig(fileGlob = "**/*.csv",    sections = csvSections,
+                         formatterConfig = ColumnarFormatterConfig.csv)
+        ))
+      }
+    }
+
+    "given an empty config list" should {
+
+      "succeed without error" in {
+        noException should be thrownBy runCheckTask(tmp, Seq.empty)
       }
     }
   }
